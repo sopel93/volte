@@ -24,7 +24,7 @@ jobs:
           echo '<!DOCTYPE html><html><head><title>Volte</title></head><body></body></html>' > dist/index.html
 
           # Wpisz swój dokładny adres z Vercel poniżej:
-          APP_URL="https://TWOJ-ADRES.vercel.app"
+          APP_URL="https://volte-rhwx2hcmu-ssopel.vercel.app"
 
           npm install @capacitor/core @capacitor/cli @capacitor/android
 
