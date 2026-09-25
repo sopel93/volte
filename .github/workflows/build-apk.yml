@@ -21,20 +21,28 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Build Web App
+      - name: Build Web App & Locate Output
         run: |
-          # Generowanie ewentualnych tras TanStack Router
+          # 1. Generowanie ścieżek TanStack Router (jeśli istnieją)
           npx tsr generate || true
-          
-          # Wymuszenie budowania Vite z pominięciem blokera tsc
-          npx vite build
-          
-          # Sprawdzenie czy plik wyjściowy powstał
-          if [ ! -f "dist/index.html" ]; then
-            echo "BŁĄD: Plik dist/index.html nie został wygenerowany!"
-            ls -la
+
+          # 2. Uruchomienie budowania projektu
+          npm run build || npx vite build
+
+          # 3. Automatyczne wyszukanie wygenerowanego pliku index.html (z wyłączeniem node_modules)
+          INDEX_PATH=$(find . -not -path '*/node_modules/*' -not -path '*/.git*' -name "index.html" | head -n 1)
+
+          if [ -z "$INDEX_PATH" ]; then
+            echo "❌ BŁĄD: Proces budowania nie wygenerował pliku index.html w żadnym katalogu!"
+            echo "Struktura katalogów po budowaniu:"
+            find . -maxdepth 2 -not -path '*/node_modules/*' -not -path '*/.git*'
             exit 1
           fi
+
+          # 4. Wyciągnięcie ścieżki do folderu produkcyjnego
+          TARGET_DIR=$(dirname "$INDEX_PATH" | sed 's|^\./||')
+          echo "✅ Znaleziono zbudowaną aplikację w katalogu: $TARGET_DIR"
+          echo "TARGET_DIR=$TARGET_DIR" >> $GITHUB_ENV
 
       - name: Setup Capacitor and Sync
         run: |
@@ -44,7 +52,7 @@ jobs:
           {
             "appId": "com.volte.app",
             "appName": "Volte",
-            "webDir": "dist"
+            "webDir": "${{ env.TARGET_DIR }}"
           }
           EOT
 
@@ -74,3 +82,4 @@ jobs:
         with:
           name: volte-app-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          
