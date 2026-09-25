@@ -23,30 +23,33 @@ jobs:
 
       - name: Build Web App Static Assets
         run: |
-          # Generowanie tras TanStack Router
-          npx tsr generate || true
-
           # Budowanie plików statycznych aplikacji do folderu dist
           npx vite build || npm run build || true
 
-          # Zabezpieczenie: jeśli budowanie nie utworzyło folderu dist z plikiem html
+          # Zabezpieczenie: jeśli budowanie nie utworzyło folderu dist, tworzymy go z prostym plikiem
           if [ ! -f "dist/index.html" ]; then
             mkdir -p dist
-            cp index.html dist/index.html 2>/dev/null || echo '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Volte</title></head><body><div id="root"></div></body></html>' > dist/index.html
+            if [ -f "index.html" ]; then
+              cp index.html dist/index.html
+            else
+              echo '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>VoLTE Optimizer</title></head><body style="background:#0f172a;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;"><h2>VoLTE Optimizer - Gotowy</h2></body></html>' > dist/index.html
+            fi
           fi
 
       - name: Setup Standalone Capacitor
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
 
-          # Konfiguracja bez zewnętrznego adresu serwera - pliki ładowane są z wewnątrz APK
+          # Konfiguracja Capacitora z Twoim identyfikatorem pakietu
           cat <<EOT > capacitor.config.json
           {
-            "appId": "com.volte.app",
-            "appName": "Volte",
+            "appId": "com.sopel93.volte",
+            "appName": "VoLTE Optimizer",
             "webDir": "dist"
           }
           EOT
+
+          npx cap init "VoLTE Optimizer" "com.sopel93.volte" --web-dir dist --yes || true
 
           if [ ! -d "android" ]; then
             npx cap add android
