@@ -16,43 +16,27 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
-      - name: Install dependencies
-        run: npm install --legacy-peer-deps
-
-      - name: Build Web App & Locate Output
+      - name: Setup Dummy Web Directory & Config
         run: |
-          # 1. Generowanie ścieżek TanStack Router (jeśli istnieją)
-          npx tsr generate || true
+          mkdir -p dist
+          echo '<!DOCTYPE html><html><head><title>Volte</title></head><body></body></html>' > dist/index.html
 
-          # 2. Uruchomienie budowania projektu
-          npm run build || npx vite build
+          # Zamień poniższy URL na swój prawdziwy adres z Vercel!
+          APP_URL="https://volte-rhwx2hcmu-ssopel.vercel.app"
 
-          # 3. Automatyczne wyszukanie wygenerowanego pliku index.html (z wyłączeniem node_modules)
-          INDEX_PATH=$(find . -not -path '*/node_modules/*' -not -path '*/.git*' -name "index.html" | head -n 1)
-
-          if [ -z "$INDEX_PATH" ]; then
-            echo "❌ BŁĄD: Proces budowania nie wygenerował pliku index.html w żadnym katalogu!"
-            echo "Struktura katalogów po budowaniu:"
-            find . -maxdepth 2 -not -path '*/node_modules/*' -not -path '*/.git*'
-            exit 1
-          fi
-
-          # 4. Wyciągnięcie ścieżki do folderu produkcyjnego
-          TARGET_DIR=$(dirname "$INDEX_PATH" | sed 's|^\./||')
-          echo "✅ Znaleziono zbudowaną aplikację w katalogu: $TARGET_DIR"
-          echo "TARGET_DIR=$TARGET_DIR" >> $GITHUB_ENV
-
-      - name: Setup Capacitor and Sync
-        run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
 
           cat <<EOT > capacitor.config.json
           {
             "appId": "com.volte.app",
             "appName": "Volte",
-            "webDir": "${{ env.TARGET_DIR }}"
+            "webDir": "dist",
+            "server": {
+              "url": "$APP_URL",
+              "cleartext": true
+            }
           }
           EOT
 
