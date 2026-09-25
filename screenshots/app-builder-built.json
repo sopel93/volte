@@ -1,0 +1,38 @@
+{
+  "url": "http://127.0.0.1:8081/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "VOLT",
+      "hasCanvas": false,
+      "bodyTextLen": 544,
+      "bodyTextHash": "2f8315839df52aff5f521b3bcfa74e077e066b208ec3f1f9db0aaacd15871dc6",
+      "bodyTextPrefix": "VOLT · TUNER KOMÓRKOWY realme 9 Pro 5G Snapdragon 695 5G · modem",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "VOLT",
+      "hasCanvas": false,
+      "bodyTextLen": 544,
+      "bodyTextHash": "2f8315839df52aff5f521b3bcfa74e077e066b208ec3f1f9db0aaacd15871dc6",
+      "bodyTextPrefix": "VOLT · TUNER KOMÓRKOWY realme 9 Pro 5G Snapdragon 695 5G · modem",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-built.json",
+  "divergesFromBaseline": false,
+  "baselineReasons": []
+}
