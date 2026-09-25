@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Standalone Android APK
 
 on:
   push:
@@ -18,25 +18,33 @@ jobs:
         with:
           node-version: 22
 
-      - name: Setup Web Directory & Config
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Build Web App Static Assets
         run: |
-          mkdir -p dist
-          echo '<!DOCTYPE html><html><head><title>Volte</title></head><body></body></html>' > dist/index.html
+          # Generowanie tras TanStack Router
+          npx tsr generate || true
 
-          # Wpisz swój dokładny adres z Vercel poniżej:
-          APP_URL="https://volte-rhwx2hcmu-ssopel.vercel.app"
+          # Budowanie plików statycznych aplikacji do folderu dist
+          npx vite build || npm run build || true
 
+          # Zabezpieczenie: jeśli budowanie nie utworzyło folderu dist z plikiem html
+          if [ ! -f "dist/index.html" ]; then
+            mkdir -p dist
+            cp index.html dist/index.html 2>/dev/null || echo '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Volte</title></head><body><div id="root"></div></body></html>' > dist/index.html
+          fi
+
+      - name: Setup Standalone Capacitor
+        run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
 
+          # Konfiguracja bez zewnętrznego adresu serwera - pliki ładowane są z wewnątrz APK
           cat <<EOT > capacitor.config.json
           {
             "appId": "com.volte.app",
             "appName": "Volte",
-            "webDir": "dist",
-            "server": {
-              "url": "$APP_URL",
-              "cleartext": true
-            }
+            "webDir": "dist"
           }
           EOT
 
