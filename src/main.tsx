@@ -1,7 +1,10 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider } from '@tanstack/react-router'
-import { router } from './router' // lub eksport domyślny, zależnie od tego jak jest zdefiniowany
+import { getRouter } from './router'
+
+// Tworzymy instancję routera za pomocą Twojej funkcji
+const router = getRouter()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
