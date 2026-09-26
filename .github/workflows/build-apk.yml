@@ -23,18 +23,11 @@ jobs:
 
       - name: Build Web App Static Assets
         run: |
-          # Budowanie plików statycznych aplikacji do folderu dist
-          npx vite build || npm run build || true
+          # Generowanie tras TanStack Router
+          npx @tanstack/router-cli generate || npx tsr generate || true
 
-          # Zabezpieczenie: jeśli budowanie nie utworzyło folderu dist, tworzymy go z prostym plikiem
-          if [ ! -f "dist/index.html" ]; then
-            mkdir -p dist
-            if [ -f "index.html" ]; then
-              cp index.html dist/index.html
-            else
-              echo '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>VoLTE Optimizer</title></head><body style="background:#0f172a;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;"><h2>VoLTE Optimizer - Gotowy</h2></body></html>' > dist/index.html
-            fi
-          fi
+          # Budowanie plików statycznych aplikacji do folderu dist
+          npm run build
 
       - name: Setup Standalone Capacitor
         run: |
