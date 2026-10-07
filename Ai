@@ -1,0 +1,7 @@
+# Clone and run the universal installer (links skills into all detected AI harnesses)
+git clone https://github.com/imMamdouhaboammar/chatgpt-codex-plugin-autopilot.git
+bash chatgpt-codex-plugin-autopilot/install.sh
+
+# Or via npm/Bun
+bun add -g chatgpt-codex-plugin-autopilot
+# npx chatgpt-codex-plugin-autopilot
