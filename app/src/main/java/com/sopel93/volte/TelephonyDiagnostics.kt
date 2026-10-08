@@ -66,7 +66,7 @@ object TelephonyDiagnostics {
                 runCatching { networkTypeLabel(tm.dataNetworkType) }.getOrDefault("Nieznany"),
                 runCatching { tm.networkOperatorName.orEmpty() }.getOrDefault("Nieznany"),
                 runCatching { tm.networkCountryIso.orEmpty() }.getOrDefault("brak"),
-                runCatching { serviceStateLabel(tm.serviceState) }.getOrDefault("Nieznany"),
+                runCatching { tm.serviceState?.let { serviceStateLabel(it) } ?: "Nieznany" }.getOrDefault("Nieznany"),
                 sims, cells
             )
         } catch (e: SecurityException) {
