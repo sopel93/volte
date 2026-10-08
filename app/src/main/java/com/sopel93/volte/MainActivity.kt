@@ -12,6 +12,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -283,8 +284,10 @@ class MainActivity : AppCompatActivity() {
         try {
             if (!Shizuku.pingBinder()) { openShizuku(); return }
             if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) { refreshShizuku(); return }
-            if (Shizuku.shouldShowRequestPermissionRationale()) openShizuku()
-            else Shizuku.requestPermission(SHIZUKU_REQUEST_CODE)
+            if (Shizuku.shouldShowRequestPermissionRationale()) {
+                Toast.makeText(this, "Nadaj VoLTE Optimizer uprawnienie w Shizuku.", Toast.LENGTH_LONG).show()
+            }
+            Shizuku.requestPermission(SHIZUKU_REQUEST_CODE)
         } catch (_: Throwable) { openShizuku() }
     }
 
