@@ -16,7 +16,6 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.google.android.material.card.MaterialCardView
 import rikka.shizuku.Shizuku
 
 class MainActivity : AppCompatActivity() {
@@ -241,10 +240,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun card() = MaterialCardView(this).apply {
-        radius = dp(18).toFloat()
-        cardElevation = dp(2).toFloat()
-        setContentPadding(dp(16), dp(16), dp(16), dp(16))
+    private fun card() = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(16), dp(16), dp(16), dp(16))
+        setBackgroundColor(0xFFFFFFFF.toInt())
+        elevation = dp(2).toFloat()
     }
 
     private fun verticalBox() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
