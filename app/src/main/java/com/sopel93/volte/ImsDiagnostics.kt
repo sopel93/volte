@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.telephony.SubscriptionManager
 import android.telephony.ims.ImsManager
-import android.telephony.ims.RegistrationManager
 import androidx.core.content.ContextCompat
 
 data class ImsReport(
@@ -32,14 +31,7 @@ object ImsDiagnostics {
             }
             val imsManager = context.getSystemService(ImsManager::class.java)
             val mmTel = imsManager.getImsMmTelManager(subId)
-            val registration = runCatching {
-                when (val state = mmTel.registrationState) {
-                    RegistrationManager.REGISTRATION_STATE_REGISTERED -> "ZAREJESTROWANY"
-                    RegistrationManager.REGISTRATION_STATE_REGISTERING -> "REJESTROWANIE"
-                    RegistrationManager.REGISTRATION_STATE_NOT_REGISTERED -> "NIEZAREJESTROWANY"
-                    else -> "STAN $state"
-                }
-            }.getOrElse { "Brak dostępu (${it.javaClass.simpleName})" }
+            val registration = "Szczegóły wymagają dostępu operatorskiego/systemowego"
             val volte = runCatching {
                 if (mmTel.isAdvancedCallingSettingEnabled) "WŁĄCZONE" else "WYŁĄCZONE"
             }.getOrElse { "Niedostępne" }
