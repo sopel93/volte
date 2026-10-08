@@ -7,6 +7,8 @@ import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
+import android.speech.tts.TextToSpeech
+import java.util.Locale
 import android.provider.Settings
 import android.view.View
 import android.widget.Button
@@ -30,6 +32,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var telephonyStatus: TextView
     private lateinit var imsStatus: TextView
     private lateinit var shizukuButton: Button
+    private var welcomeTts: TextToSpeech? = null
 
     private val binderListener = Shizuku.OnBinderReceivedListener {
         runOnUiThread { refreshAll() }
@@ -44,11 +47,15 @@ class MainActivity : AppCompatActivity() {
         Shizuku.addBinderReceivedListener(binderListener)
         Shizuku.addRequestPermissionResultListener(permissionListener)
         setContentView(buildUi())
+        initWelcomeVoice()
         requestTelephonyPermissionsIfNeeded()
         refreshAll()
     }
 
     override fun onDestroy() {
+        welcomeTts?.stop()
+        welcomeTts?.shutdown()
+        welcomeTts = null
         Shizuku.removeBinderReceivedListener(binderListener)
         Shizuku.removeRequestPermissionResultListener(permissionListener)
         super.onDestroy()
@@ -74,6 +81,11 @@ class MainActivity : AppCompatActivity() {
             setTextColor(0xFF667085.toInt())
             setPadding(0, dp(4), 0, dp(18))
         }, matchWrap())
+
+        root.addView(Button(this).apply {
+            text = "🔊 Odtwórz powitanie"
+            setOnClickListener { speakWelcome() }
+        }, matchWrap(dp(12)))
 
         val shizukuCard = card()
         val shizukuBox = verticalBox()
@@ -134,7 +146,7 @@ class MainActivity : AppCompatActivity() {
 
         val safeCard = card()
         safeCard.addView(TextView(this).apply {
-            text = "Bezpieczne operacje\n\nNa tym etapie aplikacja tylko odczytuje stan systemu i otwiera oficjalne ustawienia Androida. Nie zmienia operatora, APN, trybu sieci ani konfiguracji IMS w tle. Funkcje modyfikujące przez Shizuku dodamy dopiero po testach i z potwierdzeniem użytkownika."
+            text = "Bezpieczne operacje\n\nAplikacja działa natywnie na Androidzie 14. Odczytuje stan sieci, SIM, radia i IMS oraz sprawdza Shizuku. Nie zmienia operatora, APN, trybu sieci ani konfiguracji IMS w tle. Operacje przez Shizuku będą wykonywane wyłącznie po wyraźnym poleceniu i z informacją o skutkach.\n\nWersja: 3.0-native"
             textSize = 15f
             setTextColor(0xFF344054.toInt())
             setPadding(dp(16), dp(16), dp(16), dp(16))
@@ -142,6 +154,29 @@ class MainActivity : AppCompatActivity() {
         root.addView(safeCard, matchWrap())
 
         return ScrollView(this).apply { addView(root) }
+    }
+
+    private fun initWelcomeVoice() {
+        welcomeTts = TextToSpeech(this) { result ->
+            if (result == TextToSpeech.SUCCESS) {
+                welcomeTts?.language = Locale("pl", "PL")
+                welcomeTts?.setSpeechRate(0.92f)
+                welcomeTts?.setPitch(1.0f)
+                speakWelcome()
+            }
+        }
+    }
+
+    private fun speakWelcome() {
+        val tts = welcomeTts ?: return
+        runCatching {
+            tts.speak(
+                "Witamy w aplikacji Wojtka Sobczaka.",
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "volte_welcome"
+            )
+        }
     }
 
     private fun refreshAll() {
