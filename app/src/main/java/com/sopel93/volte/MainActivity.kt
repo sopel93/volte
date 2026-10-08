@@ -85,6 +85,11 @@ class MainActivity : AppCompatActivity() {
         root.addView(Button(this).apply {
             text = "🔊 Odtwórz powitanie"
             setOnClickListener { speakWelcome() }
+        }, matchWrap(dp(8)))
+
+        root.addView(Button(this).apply {
+            text = "📤 Utwórz i udostępnij raport diagnostyczny"
+            setOnClickListener { shareDiagnosticReport() }
         }, matchWrap(dp(12)))
 
         val shizukuCard = card()
@@ -151,7 +156,19 @@ class MainActivity : AppCompatActivity() {
             setTextColor(0xFF344054.toInt())
             setPadding(dp(16), dp(16), dp(16), dp(16))
         })
-        root.addView(safeCard, matchWrap())
+        root.addView(safeCard, matchWrap(dp(12)))
+
+        val infoCard = card()
+        infoCard.addView(TextView(this).apply {
+            val version = runCatching {
+                packageManager.getPackageInfo(packageName, 0).versionName ?: "nieznana"
+            }.getOrDefault("nieznana")
+            text = "Informacje o aplikacji\\n\\nWersja: $version\\nAndroid: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})\\nUrządzenie: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\\n\\nAplikacja jest natywna i nie korzysta z przeglądarki ani WebView."
+            textSize = 15f
+            setTextColor(0xFF344054.toInt())
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+        })
+        root.addView(infoCard, matchWrap())
 
         return ScrollView(this).apply { addView(root) }
     }
@@ -159,10 +176,13 @@ class MainActivity : AppCompatActivity() {
     private fun initWelcomeVoice() {
         welcomeTts = TextToSpeech(this) { result ->
             if (result == TextToSpeech.SUCCESS) {
-                welcomeTts?.language = Locale("pl", "PL")
-                welcomeTts?.setSpeechRate(0.92f)
-                welcomeTts?.setPitch(1.0f)
-                speakWelcome()
+                val locale = Locale("pl", "PL")
+                val status = welcomeTts?.setLanguage(locale)
+                if (status != TextToSpeech.LANG_MISSING_DATA && status != TextToSpeech.LANG_NOT_SUPPORTED) {
+                    welcomeTts?.setSpeechRate(0.92f)
+                    welcomeTts?.setPitch(1.0f)
+                    speakWelcome()
+                }
             }
         }
     }
@@ -177,6 +197,21 @@ class MainActivity : AppCompatActivity() {
                 "volte_welcome"
             )
         }
+    }
+
+    private fun shareDiagnosticReport() {
+        Thread {
+            val report = runCatching { DiagnosticReport.create(this) }
+                .getOrElse { "Nie udało się utworzyć raportu: ${it.message ?: "nieznany błąd"}" }
+            runOnUiThread {
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "VoLTE Optimizer - raport diagnostyczny")
+                    putExtra(Intent.EXTRA_TEXT, report)
+                }
+                startActivity(Intent.createChooser(intent, "Udostępnij raport"))
+            }
+        }.start()
     }
 
     private fun refreshAll() {
