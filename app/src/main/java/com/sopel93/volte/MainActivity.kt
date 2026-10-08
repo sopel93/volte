@@ -235,7 +235,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshNetwork() {
         val r = NetworkDiagnostics.collect(this)
-        dashboardNetwork.text = "• SIEĆ\n${if (r.internet) "Online" else "Offline"}"
+        dashboardNetwork.text = "• SIEĆ\n${if (r.internet != "BRAK") "Online" else "Offline"}"
         networkStatus.text = "Transport: ${r.transport}\nInternet: ${r.internet}\nWalidacja: ${if (r.validated) "OK" else "brak"}\nMetered: ${if (r.metered) "tak" else "nie"}\nCaptive portal: ${if (r.captivePortal) "wykryty" else "nie"}\nŁącze: ↓ ${r.linkDownstream} kb/s • ↑ ${r.linkUpstream} kb/s"
     }
 
