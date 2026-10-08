@@ -1,333 +1,294 @@
 package com.sopel93.volte
 
-import android.Manifest
-import android.content.Intent
+import android.content.ComponentName
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
-import android.graphics.Typeface
 import android.os.Bundle
-import android.speech.tts.TextToSpeech
-import android.provider.Settings
-import android.view.View
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.ScrollView
+import android.os.IBinder
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import rikka.shizuku.Shizuku
-import java.util.Locale
+import rikka.shizuku.Shizuku.OnRequestPermissionResultListener
+import rikka.shizuku.Shizuku.UserServiceArgs
 
+/**
+ * VOLT — tuner Realme 9 Pro 5G przez Shizuku.
+ * Shizuku 13.1.5: UserService zamiast usuniętego Shizuku.newProcess().
+ */
 class MainActivity : AppCompatActivity() {
-    companion object {
-        private const val SHIZUKU_REQUEST_CODE = 1001
-        private const val TELEPHONY_REQUEST_CODE = 1002
-        private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
+
+    private lateinit var status: TextView
+    private lateinit var logView: TextView
+    private var shell: IShellService? = null
+    private var serviceBound = false
+
+    private val userServiceArgs by lazy {
+        UserServiceArgs(ComponentName(packageName, ShellService::class.java.name))
+            .daemon(false)
+            .processNameSuffix("shell")
+            .debuggable(BuildConfig.DEBUG)
+            .version(BuildConfig.VERSION_CODE)
     }
 
-    private lateinit var shizukuStatus: TextView
-    private lateinit var networkStatus: TextView
-    private lateinit var telephonyStatus: TextView
-    private lateinit var imsStatus: TextView
-    private lateinit var dashboardShizuku: TextView
-    private lateinit var dashboardNetwork: TextView
-    private lateinit var dashboardIms: TextView
-    private lateinit var shizukuButton: Button
-    private var welcomeTts: TextToSpeech? = null
+    private val permissionListener = OnRequestPermissionResultListener { requestCode, grantResult ->
+        if (requestCode != REQ_SHIZUKU) return@OnRequestPermissionResultListener
+        if (grantResult == PackageManager.PERMISSION_GRANTED) {
+            log("Uprawnienie Shizuku przyznane")
+            bindShell()
+        } else {
+            log("Odmowa Shizuku — otwórz aplikację Shizuku i włącz VOLT")
+        }
+        renderStatus()
+    }
 
-    private val binderListener = Shizuku.OnBinderReceivedListener { runOnUiThread { refreshAll() } }
-    private val permissionListener = Shizuku.OnRequestPermissionResultListener { requestCode, _ ->
-        if (requestCode == SHIZUKU_REQUEST_CODE) runOnUiThread { refreshAll() }
+    private val binderReceived = Shizuku.OnBinderReceivedListener {
+        runOnUiThread {
+            log("Binder Shizuku aktywny")
+            renderStatus()
+            if (hasShizukuPermission()) bindShell()
+        }
+    }
+
+    private val binderDead = Shizuku.OnBinderDeadListener {
+        runOnUiThread {
+            shell = null
+            serviceBound = false
+            log("Shizuku padło — uruchom je ponownie")
+            renderStatus()
+        }
+    }
+
+    private val connection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName, service: IBinder) {
+            shell = IShellService.Stub.asInterface(service)
+            log("Shell UserService połączony (uid shell)")
+            renderStatus()
+        }
+
+        override fun onServiceDisconnected(name: ComponentName) {
+            shell = null
+            serviceBound = false
+            log("UserService rozłączony")
+            renderStatus()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Shizuku.addBinderReceivedListener(binderListener)
+        setContentView(R.layout.activity_main)
+        status = findViewById(R.id.status)
+        logView = findViewById(R.id.log)
+        logView.tag = logView.text.toString()
+        bindClicks()
+
         Shizuku.addRequestPermissionResultListener(permissionListener)
-        setContentView(buildUi())
-        initWelcomeVoice()
-        requestTelephonyPermissionsIfNeeded()
-        refreshAll()
+        Shizuku.addBinderReceivedListenerSticky(binderReceived)
+        Shizuku.addBinderDeadListener(binderDead)
+
+        renderStatus()
+        if (isShizukuLive() && hasShizukuPermission()) bindShell()
     }
 
     override fun onDestroy() {
-        welcomeTts?.stop()
-        welcomeTts?.shutdown()
-        welcomeTts = null
-        Shizuku.removeBinderReceivedListener(binderListener)
         Shizuku.removeRequestPermissionResultListener(permissionListener)
+        Shizuku.removeBinderReceivedListener(binderReceived)
+        Shizuku.removeBinderDeadListener(binderDead)
+        if (serviceBound) {
+            try {
+                Shizuku.unbindUserService(userServiceArgs, connection, true)
+            } catch (_: Throwable) {
+            }
+            serviceBound = false
+        }
         super.onDestroy()
     }
 
-    private fun buildUi(): View {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(16), dp(16), dp(28))
-            setBackgroundColor(0xFFF4F6FA.toInt())
+    private fun bindClicks() {
+        findViewById<android.view.View>(R.id.btn_shizuku).setOnClickListener { requestShizuku() }
+        findViewById<android.view.View>(R.id.btn_grant).setOnClickListener {
+            runAndLog("WRITE_SECURE_SETTINGS", TunerCommands.GRANT_SECURE)
         }
-
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(20), dp(20), dp(20))
-            setBackgroundResource(R.drawable.bg_header)
+        findViewById<android.view.View>(R.id.btn_apply_all).setOnClickListener {
+            runAndLog("Cały tuner", TunerCommands.APPLY_ALL)
         }
-        header.addView(TextView(this).apply {
-            text = "⚡ VoLTE OPTIMIZER"
-            textSize = 27f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(0xFFFFFFFF.toInt())
-        }, matchWrap())
-        header.addView(TextView(this).apply {
-            text = "Centrum diagnostyki sieci • IMS • SIM • Shizuku"
-            textSize = 14f
-            setTextColor(0xFFE9D5FF.toInt())
-            setPadding(0, dp(5), 0, 0)
-        }, matchWrap())
-        root.addView(header, matchWrap(dp(12)))
-
-        val dashboard = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        dashboardShizuku = dashboardItem(dashboard, "SHIZUKU")
-        dashboardNetwork = dashboardItem(dashboard, "SIEĆ")
-        dashboardIms = dashboardItem(dashboard, "IMS")
-        root.addView(dashboard, matchWrap(dp(12)))
-
-        root.addView(actionButton("🔊  Odtwórz powitanie") { speakWelcome() }, matchWrap(dp(8)))
-        root.addView(actionButton("📤  Utwórz i udostępnij raport") { shareDiagnosticReport() }, matchWrap(dp(16)))
-
-        val shizukuBox = verticalBox()
-        shizukuBox.addView(sectionTitle("🟣  Shizuku"))
-        shizukuStatus = statusText()
-        shizukuBox.addView(shizukuStatus, matchWrap())
-        shizukuButton = actionButton("Sprawdź / nadaj uprawnienie Shizuku") { requestShizukuPermission() }
-        shizukuBox.addView(shizukuButton, matchWrap(dp(8)))
-        shizukuBox.addView(actionButton("Otwórz Shizuku") { openShizuku() }, matchWrap())
-        root.addView(card(shizukuBox), matchWrap(dp(12)))
-
-        val networkBox = verticalBox()
-        networkBox.addView(sectionTitle("📡  Sieć i internet"))
-        networkStatus = statusText()
-        networkBox.addView(networkStatus, matchWrap())
-        networkBox.addView(actionButton("Odśwież diagnostykę") { refreshAll() }, matchWrap(dp(8)))
-        networkBox.addView(actionButton("Otwórz ustawienia sieci") {
-            startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS))
-        }, matchWrap())
-        root.addView(card(networkBox), matchWrap(dp(12)))
-
-        val simBox = verticalBox()
-        simBox.addView(sectionTitle("📱  SIM • operator • radio"))
-        telephonyStatus = statusText()
-        simBox.addView(telephonyStatus, matchWrap())
-        simBox.addView(actionButton("Otwórz ustawienia SIM") { openSimSettings() }, matchWrap())
-        root.addView(card(simBox), matchWrap(dp(12)))
-
-        val imsBox = verticalBox()
-        imsBox.addView(sectionTitle("⚡  VoLTE / IMS"))
-        imsStatus = statusText()
-        imsBox.addView(imsStatus, matchWrap())
-        imsBox.addView(actionButton("Sprawdź IMS ponownie") { refreshIms() }, matchWrap())
-        root.addView(card(imsBox), matchWrap(dp(12)))
-
-        val safeBox = verticalBox()
-        safeBox.addView(sectionTitle("🛡  Bezpieczne operacje"))
-        safeBox.addView(TextView(this).apply {
-            text = "Aplikacja działa natywnie na Androidzie 14. Odczytuje stan sieci, SIM, radia i IMS oraz sprawdza Shizuku. Nie zmienia operatora, APN, trybu sieci ani konfiguracji IMS w tle. Operacje przez Shizuku są wykonywane wyłącznie po wyraźnym poleceniu."
-            textSize = 14f
-            setTextColor(0xFF475467.toInt())
-        }, matchWrap())
-        root.addView(card(safeBox), matchWrap(dp(12)))
-
-        val infoBox = verticalBox()
-        infoBox.addView(sectionTitle("ℹ️  Informacje"))
-        val version = runCatching { packageManager.getPackageInfo(packageName, 0).versionName ?: "nieznana" }
-            .getOrDefault("nieznana")
-        infoBox.addView(TextView(this).apply {
-            text = "Wersja: $version\nAndroid: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})\nUrządzenie: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n\nBrak WebView. Aplikacja jest w pełni natywna."
-            textSize = 14f
-            setTextColor(0xFF475467.toInt())
-        }, matchWrap())
-        root.addView(card(infoBox), matchWrap())
-
-        return ScrollView(this).apply {
-            isFillViewport = true
-            addView(root)
+        findViewById<android.view.View>(R.id.btn_smart5g).setOnClickListener {
+            runAndLog("Inteligentne 5G OFF", TunerCommands.SMART_5G_OFF)
+        }
+        findViewById<android.view.View>(R.id.btn_network_auto).setOnClickListener {
+            runAndLog("Typ sieci NSA", TunerCommands.NETWORK_AUTO_5G)
+        }
+        findViewById<android.view.View>(R.id.btn_data_saver).setOnClickListener {
+            runAndLog("Oszczędzanie danych OFF", TunerCommands.DATA_SAVER_OFF)
+        }
+        findViewById<android.view.View>(R.id.btn_always_on).setOnClickListener {
+            runAndLog("mobile_data_always_on", TunerCommands.MOBILE_ALWAYS_ON)
+        }
+        findViewById<android.view.View>(R.id.btn_battery).setOnClickListener {
+            runAndLog("Bateria", TunerCommands.BATTERY_BALANCED)
+            runAndLog("Otwórz baterię", TunerCommands.OPEN_BATTERY)
+        }
+        findViewById<android.view.View>(R.id.btn_dual).setOnClickListener {
+            runAndLog("Wi-Fi / dwukanałowe", TunerCommands.OPEN_WIFI)
+        }
+        findViewById<android.view.View>(R.id.btn_sim).setOnClickListener {
+            runAndLog("Karta SIM", TunerCommands.OPEN_SIM)
+        }
+        findViewById<android.view.View>(R.id.btn_dns_cf).setOnClickListener {
+            runAndLog("DNS Cloudflare", TunerCommands.privateDns("one.one.one.one"))
+        }
+        findViewById<android.view.View>(R.id.btn_dns_google).setOnClickListener {
+            runAndLog("DNS Google", TunerCommands.privateDns("dns.google"))
+        }
+        findViewById<android.view.View>(R.id.btn_dns_quad9).setOnClickListener {
+            runAndLog("DNS Quad9", TunerCommands.privateDns("dns.quad9.net"))
+        }
+        findViewById<android.view.View>(R.id.btn_dns_adguard).setOnClickListener {
+            runAndLog("DNS AdGuard", TunerCommands.privateDns("dns.adguard-dns.com"))
+        }
+        findViewById<android.view.View>(R.id.btn_dns_off).setOnClickListener {
+            runAndLog("DNS off", TunerCommands.DNS_OFF)
+        }
+        findViewById<android.view.View>(R.id.btn_apn_ipv6).setOnClickListener {
+            runAndLog("APN IPv4/IPv6", TunerCommands.APN_IPV4V6)
+        }
+        findViewById<android.view.View>(R.id.btn_apn_play).setOnClickListener {
+            runAndLog(
+                "APN Play",
+                TunerCommands.insertApn("Play Internet", "internet", "260", "06"),
+            )
+        }
+        findViewById<android.view.View>(R.id.btn_apn_orange).setOnClickListener {
+            runAndLog(
+                "APN Orange",
+                TunerCommands.insertApn("Orange Internet", "internet", "260", "03"),
+            )
+        }
+        findViewById<android.view.View>(R.id.btn_apn_plus).setOnClickListener {
+            runAndLog(
+                "APN Plus",
+                TunerCommands.insertApn("Plus Internet", "plus", "260", "01", "plusgsm", "plusgsm"),
+            )
+        }
+        findViewById<android.view.View>(R.id.btn_apn_tmobile).setOnClickListener {
+            runAndLog(
+                "APN T-Mobile",
+                TunerCommands.insertApn("T-Mobile Internet", "internet", "260", "02"),
+            )
+        }
+        findViewById<android.view.View>(R.id.btn_apn_open).setOnClickListener {
+            runAndLog("Lista APN", TunerCommands.OPEN_APN)
+        }
+        findViewById<android.view.View>(R.id.btn_volte).setOnClickListener {
+            runAndLog("VoLTE", TunerCommands.VOLTE_ON)
+        }
+        findViewById<android.view.View>(R.id.btn_vowifi).setOnClickListener {
+            runAndLog("VoWiFi", TunerCommands.VOWIFI_ON)
+        }
+        findViewById<android.view.View>(R.id.btn_radioinfo).setOnClickListener {
+            runAndLog("RadioInfo", TunerCommands.RADIO_INFO)
         }
     }
 
-    private fun dashboardItem(parent: LinearLayout, label: String): TextView {
-        val view = TextView(this).apply {
-            text = "• $label\nSprawdzam"
-            textSize = 11f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(0xFF344054.toInt())
-            setPadding(dp(8), dp(10), dp(8), dp(10))
-            setBackgroundColor(0xFFFFFFFF.toInt())
+    private fun isShizukuLive(): Boolean = try {
+        Shizuku.pingBinder()
+    } catch (_: Throwable) {
+        false
+    }
+
+    private fun hasShizukuPermission(): Boolean = try {
+        Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+    } catch (_: Throwable) {
+        false
+    }
+
+    private fun requestShizuku() {
+        if (!isShizukuLive()) {
+            log("Shizuku nie działa. Zainstaluj Shizuku, włącz debugowanie bezprzewodowe i uruchom parowanie.")
+            renderStatus()
+            return
         }
-        parent.addView(view, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-            setMargins(dp(2), 0, dp(2), 0)
-        })
-        return view
-    }
-
-    private fun actionButton(label: String, onClick: () -> Unit) = Button(this).apply {
-        text = label
-        textSize = 14f
-        setTextColor(0xFFFFFFFF.toInt())
-        setBackgroundResource(R.drawable.bg_button)
-        stateListAnimator = null
-        minHeight = dp(52)
-        setAllCaps(false)
-        setOnClickListener { onClick() }
-    }
-
-    private fun initWelcomeVoice() {
-        welcomeTts = TextToSpeech(this) { result ->
-            if (result == TextToSpeech.SUCCESS) {
-                val status = welcomeTts?.setLanguage(Locale("pl", "PL"))
-                if (status != TextToSpeech.LANG_MISSING_DATA && status != TextToSpeech.LANG_NOT_SUPPORTED) {
-                    welcomeTts?.setSpeechRate(0.92f)
-                    welcomeTts?.setPitch(1.0f)
-                    speakWelcome()
-                }
-            }
+        if (hasShizukuPermission()) {
+            log("Uprawnienie już jest")
+            bindShell()
+            renderStatus()
+            return
         }
+        Shizuku.requestPermission(REQ_SHIZUKU)
     }
 
-    private fun speakWelcome() {
-        welcomeTts?.let { runCatching { it.speak("Witamy w aplikacji Wojtka Sobczaka.", TextToSpeech.QUEUE_FLUSH, null, "volte_welcome") } }
-    }
-
-    private fun shareDiagnosticReport() {
-        Thread {
-            val report = runCatching { DiagnosticReport.create(this) }
-                .getOrElse { "Nie udało się utworzyć raportu: ${it.message ?: "nieznany błąd"}" }
-            runOnUiThread {
-                val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_SUBJECT, "VoLTE Optimizer - raport diagnostyczny")
-                    putExtra(Intent.EXTRA_TEXT, report)
-                }
-                startActivity(Intent.createChooser(intent, "Udostępnij raport"))
-            }
-        }.start()
-    }
-
-    private fun refreshAll() {
-        refreshShizuku()
-        refreshNetwork()
-        refreshTelephony()
-        refreshIms()
-    }
-
-    private fun refreshShizuku() {
-        val report = ShizukuDiagnostics.collect()
-        dashboardShizuku.text = when {
-            !report.available -> "• SHIZUKU\nOffline"
-            !report.granted -> "• SHIZUKU\nBrak zgody"
-            else -> "• SHIZUKU\nOK"
-        }
-        shizukuStatus.text = when {
-            !report.available -> "● Shizuku: niedostępne. Uruchom usługę."
-            !report.granted -> "● Shizuku: działa, ale brak autoryzacji aplikacji."
-            else -> "● Shizuku: autoryzowane\nTryb: ${report.mode}"
-        }
-        shizukuButton.isEnabled = report.available
-    }
-
-    private fun refreshNetwork() {
-        val r = NetworkDiagnostics.collect(this)
-        dashboardNetwork.text = "• SIEĆ\n${if (r.internet != "BRAK") "Online" else "Offline"}"
-        networkStatus.text = "Transport: ${r.transport}\nInternet: ${r.internet}\nWalidacja: ${if (r.validated) "OK" else "brak"}\nMetered: ${if (r.metered) "tak" else "nie"}\nCaptive portal: ${if (r.captivePortal) "wykryty" else "nie"}\nŁącze: ↓ ${r.linkDownstream} kb/s • ↑ ${r.linkUpstream} kb/s"
-    }
-
-    private fun refreshTelephony() {
-        telephonyStatus.text = "Odczyt..."
-        Thread {
-            val r = TelephonyDiagnostics.collect(this)
-            val text = buildString {
-                append("Operator: ${r.operator.ifBlank { "brak danych" }}\n")
-                append("Kraj sieci: ${r.country.ifBlank { "brak" }}\n")
-                append("Technologia danych: ${r.networkType}\n")
-                append("Stan usługi: ${r.serviceState}\n")
-                append("Aktywne modemy: ${r.activeModems}\n\n")
-                if (r.sims.isEmpty()) append("SIM: brak danych lub brak aktywnej karty.\n")
-                r.sims.forEach {
-                    append("SIM ${it.slot}: ${it.carrier} • ${it.mccMnc}\n")
-                    append("  stan: ${it.state}, kraj: ${it.country}, roaming danych: ${if (it.dataRoaming) "tak" else "nie"}\n")
-                }
-                if (r.cells.isNotEmpty()) append("\nKomórki radiowe: ${r.cells.size} (szczegóły po zgodzie na lokalizację).")
-                r.error?.let { append("\n\nUwaga: $it") }
-            }
-            runOnUiThread { telephonyStatus.text = text }
-        }.start()
-    }
-
-    private fun refreshIms() {
-        imsStatus.text = "Sprawdzam IMS..."
-        Thread {
-            val r = ImsDiagnostics.collect(this)
-            val text = "Obsługa IMS: ${if (r.supported) "tak" else "nie"}\nSIM/subskrypcja: ${r.subscriptionId ?: "brak"}\nRejestracja IMS: ${r.registration}\nVoLTE / Advanced Calling: ${r.volte}\nVoWiFi: ${r.vowifi}" +
-                (r.error?.let { "\n\nUwaga: $it" } ?: "")
-            runOnUiThread { imsStatus.text = text }
-        }.start()
-    }
-
-    private fun requestTelephonyPermissionsIfNeeded() {
-        val missing = buildList {
-            if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) add(Manifest.permission.READ_PHONE_STATE)
-            if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) add(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-        if (missing.isNotEmpty()) ActivityCompat.requestPermissions(this, missing.toTypedArray(), TELEPHONY_REQUEST_CODE)
-    }
-
-    private fun requestShizukuPermission() {
+    private fun bindShell() {
+        if (serviceBound || !isShizukuLive() || !hasShizukuPermission()) return
         try {
-            if (!Shizuku.pingBinder()) { openShizuku(); return }
-            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) { refreshShizuku(); return }
-            if (Shizuku.shouldShowRequestPermissionRationale()) {
-                Toast.makeText(this, "Nadaj VoLTE Optimizer uprawnienie w Shizuku.", Toast.LENGTH_LONG).show()
-            }
-            Shizuku.requestPermission(SHIZUKU_REQUEST_CODE)
-        } catch (_: Throwable) { openShizuku() }
+            Shizuku.bindUserService(userServiceArgs, connection)
+            serviceBound = true
+        } catch (t: Throwable) {
+            serviceBound = false
+            log("bindUserService: ${t.message}")
+        }
     }
 
-    private fun openShizuku() {
-        packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE)?.let(::startActivity)
+    private fun runShell(command: String): String {
+        val svc = shell ?: return "Brak UserService — najpierw połącz Shizuku"
+        return try {
+            svc.exec(command)
+        } catch (t: Throwable) {
+            "błąd: ${t.message}"
+        }
     }
 
-    private fun openSimSettings() {
-        runCatching { startActivity(Intent("android.settings.SIM_SETTINGS")) }
-            .onFailure { startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS)) }
+    private fun runAndLog(title: String, command: String) {
+        if (!ensureReady()) return
+        log("→ $title")
+        Thread {
+            val out = runShell(command)
+            runOnUiThread { log(out) }
+        }.start()
     }
 
-    private fun card(content: View) = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(dp(16), dp(16), dp(16), dp(16))
-        setBackgroundColor(0xFFFFFFFF.toInt())
-        elevation = dp(3).toFloat()
-        addView(content)
+    private fun ensureReady(): Boolean {
+        if (!isShizukuLive()) {
+            log("Shizuku wyłączone")
+            renderStatus()
+            return false
+        }
+        if (!hasShizukuPermission()) {
+            requestShizuku()
+            return false
+        }
+        if (shell == null) {
+            bindShell()
+            log("Czekam na UserService… wciśnij ponownie za sekundę")
+            return false
+        }
+        return true
     }
 
-    private fun verticalBox() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-
-    private fun sectionTitle(text: String) = TextView(this).apply {
-        this.text = text
-        textSize = 19f
-        typeface = Typeface.DEFAULT_BOLD
-        setTextColor(0xFF101828.toInt())
-        setPadding(0, 0, 0, dp(8))
+    private fun renderStatus() {
+        val live = isShizukuLive()
+        val perm = live && hasShizukuPermission()
+        val ready = perm && shell != null
+        status.text = when {
+            ready -> "Shizuku · shell gotowy"
+            perm -> "Shizuku · uprawnienie OK, łączę UserService"
+            live -> "Shizuku działa · brak zgody dla VOLT"
+            else -> "Shizuku wyłączone"
+        }
+        status.setTextColor(
+            ContextCompat.getColor(
+                this,
+                if (ready) R.color.volt_signal else if (live) R.color.volt_muted else R.color.volt_danger,
+            ),
+        )
     }
 
-    private fun statusText() = TextView(this).apply {
-        textSize = 15f
-        setTextColor(0xFF344054.toInt())
-        setPadding(0, 0, 0, dp(8))
+    private fun log(line: String) {
+        val next = (logView.tag as? String).orEmpty() + line.trimEnd() + "\n\n"
+        logView.tag = next
+        logView.text = next
     }
 
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
-
-    private fun matchWrap(bottomMargin: Int = 0) = LinearLayout.LayoutParams(
-        LinearLayout.LayoutParams.MATCH_PARENT,
-        LinearLayout.LayoutParams.WRAP_CONTENT
-    ).apply { if (bottomMargin > 0) this.bottomMargin = bottomMargin }
+    companion object {
+        private const val REQ_SHIZUKU = 9001
+    }
 }
