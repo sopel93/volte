@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace 'com.sopel93.volte'
-    compileSdk 35
+    compileSdk 34
 
     defaultConfig {
         applicationId "com.sopel93.volte"
