@@ -1,0 +1,6 @@
+<resources>
+    <color name="volt_bg">#09090B</color><color name="volt_surface">#111113</color>
+    <color name="volt_raised">#18181C</color><color name="volt_fg">#F4F4F5</color>
+    <color name="volt_muted">#A1A1AA</color><color name="volt_signal">#5EEAD4</color>
+    <color name="volt_danger">#F87171</color>
+</resources>
