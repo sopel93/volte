@@ -1,0 +1,9 @@
+<resources>
+<style name="Theme.Volt" parent="Theme.Material3.Dark.NoActionBar">
+<item name="android:statusBarColor">@color/volt_bg</item><item name="android:navigationBarColor">@color/volt_bg</item>
+<item name="android:windowBackground">@color/volt_bg</item><item name="colorPrimary">@color/volt_signal</item>
+<item name="colorOnPrimary">@color/volt_bg</item><item name="colorSurface">@color/volt_surface</item>
+<item name="android:textColorPrimary">@color/volt_fg</item></style>
+<style name="VoltSection"><item name="android:layout_width">match_parent</item><item name="android:layout_height">wrap_content</item><item name="android:layout_marginTop">28dp</item><item name="android:textColor">@color/volt_fg</item><item name="android:textSize">18sp</item><item name="android:textStyle">bold</item></style>
+<style name="VoltHint"><item name="android:layout_width">match_parent</item><item name="android:layout_height">wrap_content</item><item name="android:layout_marginTop">6dp</item><item name="android:textColor">@color/volt_muted</item><item name="android:textSize">13sp</item><item name="android:lineSpacingExtra">2dp</item></style>
+</resources>
